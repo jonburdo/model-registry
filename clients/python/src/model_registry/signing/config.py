@@ -142,13 +142,12 @@ class SigningConfig(BaseModel):
                 if resolved_certificate_identity is None:
                     # For Kubernetes service account tokens, convert sub to certificate SAN format
                     # For other OIDC tokens, prefer email over sub
-                    is_k8s_token = "kubernetes.io/serviceaccount/namespace" in claims
+                    sub = claims.get("sub", "")
+                    is_k8s_token = sub.startswith("system:serviceaccount:")
                     if is_k8s_token:
-                        sub = claims.get("sub")
-                        if sub:
-                            resolved_certificate_identity = k8s_sub_to_certificate_identity(sub)
+                        resolved_certificate_identity = k8s_sub_to_certificate_identity(sub)
                     else:
-                        resolved_certificate_identity = claims.get("email") or claims.get("sub")
+                        resolved_certificate_identity = claims.get("email") or sub
             except (OSError, ValueError):
                 # If token reading/parsing fails, just use None values
                 pass

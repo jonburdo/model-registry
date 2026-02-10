@@ -860,8 +860,10 @@ class TestImageSignerFromConfig:
             "iss": "https://kubernetes.default.svc.cluster.local",
             "aud": ["https://kubernetes.default.svc.cluster.local"],
             "sub": "system:serviceaccount:my-namespace:my-serviceaccount",
-            "kubernetes.io/serviceaccount/namespace": "my-namespace",
-            "kubernetes.io/serviceaccount/service-account.name": "my-serviceaccount",
+            "kubernetes.io": {
+                "namespace": "my-namespace",
+                "serviceaccount": {"name": "my-serviceaccount"},
+            },
         }
         payload = base64.urlsafe_b64encode(json.dumps(payload_dict).encode()).decode().rstrip("=")
         signature = base64.urlsafe_b64encode(b"fake-signature").decode().rstrip("=")
@@ -887,7 +889,10 @@ class TestImageSignerFromConfig:
             "aud": "https://kubernetes.default.svc.cluster.local",
             "sub": "system:serviceaccount:my-namespace:my-serviceaccount",
             "email": "user@example.com",  # This should be ignored for K8s tokens
-            "kubernetes.io/serviceaccount/namespace": "my-namespace",
+            "kubernetes.io": {
+                "namespace": "my-namespace",
+                "serviceaccount": {"name": "my-serviceaccount"},
+            },
         }
         payload = base64.urlsafe_b64encode(json.dumps(payload_dict).encode()).decode().rstrip("=")
         signature = base64.urlsafe_b64encode(b"fake-signature").decode().rstrip("=")
