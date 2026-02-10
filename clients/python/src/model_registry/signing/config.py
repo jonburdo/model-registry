@@ -78,8 +78,9 @@ class SigningConfig(BaseModel):
           (the service account token from the workspace/workbench where code is running)
         - root_url defaults to {tuf_url}/root.json
         - oidc_issuer, client_id, certificate_identity are extracted from identity token if available
-          For Kubernetes service account tokens, certificate_identity uses the 'sub' claim
-          which is already in the correct format: system:serviceaccount:<namespace>:<serviceaccount>
+          For Kubernetes service account tokens, certificate_identity is converted from sub claim
+          (system:serviceaccount:namespace:name) to certificate SAN format
+          (https://kubernetes.io/namespaces/namespace/serviceaccounts/name)
 
         Args:
             tuf_url: TUF server URL (env: SIGSTORE_TUF_URL)
@@ -100,7 +101,7 @@ class SigningConfig(BaseModel):
         Returns:
             SigningConfig instance with resolved values
         """
-        from .token import decode_jwt_payload, extract_client_id
+        from .token import decode_jwt_payload, extract_client_id, k8s_sub_to_certificate_identity
 
         # Resolve 4 URLs from env vars
         resolved_tuf_url = resolve(tuf_url, "SIGSTORE_TUF_URL")
@@ -139,11 +140,13 @@ class SigningConfig(BaseModel):
                     resolved_client_id = extract_client_id(claims)
 
                 if resolved_certificate_identity is None:
-                    # For Kubernetes service account tokens, use sub directly (already in format: system:serviceaccount:namespace:name)
+                    # For Kubernetes service account tokens, convert sub to certificate SAN format
                     # For other OIDC tokens, prefer email over sub
                     is_k8s_token = "kubernetes.io/serviceaccount/namespace" in claims
                     if is_k8s_token:
-                        resolved_certificate_identity = claims.get("sub")
+                        sub = claims.get("sub")
+                        if sub:
+                            resolved_certificate_identity = k8s_sub_to_certificate_identity(sub)
                     else:
                         resolved_certificate_identity = claims.get("email") or claims.get("sub")
             except (OSError, ValueError):

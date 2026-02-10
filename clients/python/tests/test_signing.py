@@ -851,7 +851,7 @@ class TestImageSignerFromConfig:
 
 
     def test_k8s_token_uses_sub_for_certificate_identity(self, tmp_path):
-        """Test Kubernetes service account token uses sub claim directly."""
+        """Test Kubernetes service account token converts sub to certificate SAN format."""
         import base64
         import json
 
@@ -872,8 +872,8 @@ class TestImageSignerFromConfig:
 
         config = SigningConfig.create(identity_token_path=token_file)
 
-        # For K8s tokens, should use sub directly (already in correct format)
-        assert config.certificate_identity == "system:serviceaccount:my-namespace:my-serviceaccount"
+        # For K8s tokens, should convert sub to certificate SAN format
+        assert config.certificate_identity == "https://kubernetes.io/namespaces/my-namespace/serviceaccounts/my-serviceaccount"
         assert config.oidc_issuer == "https://kubernetes.default.svc.cluster.local"
 
     def test_k8s_token_prefers_sub_over_email(self, tmp_path):
@@ -898,6 +898,36 @@ class TestImageSignerFromConfig:
 
         config = SigningConfig.create(identity_token_path=token_file)
 
-        # Should use sub, not email, for K8s tokens
-        assert config.certificate_identity == "system:serviceaccount:my-namespace:my-serviceaccount"
+        # Should use converted sub, not email, for K8s tokens
+        assert config.certificate_identity == "https://kubernetes.io/namespaces/my-namespace/serviceaccounts/my-serviceaccount"
 
+
+
+class TestTokenUtils:
+    """Test token utility functions."""
+
+    def test_k8s_sub_to_certificate_identity(self):
+        """Test converting Kubernetes sub claim to certificate SAN format."""
+        from model_registry.signing.token import k8s_sub_to_certificate_identity
+
+        result = k8s_sub_to_certificate_identity("system:serviceaccount:project2:wb2")
+        assert result == "https://kubernetes.io/namespaces/project2/serviceaccounts/wb2"
+
+    def test_k8s_sub_to_certificate_identity_with_different_namespace(self):
+        """Test conversion with different namespace and service account."""
+        from model_registry.signing.token import k8s_sub_to_certificate_identity
+
+        result = k8s_sub_to_certificate_identity("system:serviceaccount:my-namespace:my-serviceaccount")
+        assert result == "https://kubernetes.io/namespaces/my-namespace/serviceaccounts/my-serviceaccount"
+
+    def test_k8s_sub_to_certificate_identity_invalid_format(self):
+        """Test conversion with invalid format returns as-is."""
+        from model_registry.signing.token import k8s_sub_to_certificate_identity
+
+        # Not a K8s format
+        result = k8s_sub_to_certificate_identity("user@example.com")
+        assert result == "user@example.com"
+
+        # Missing parts
+        result = k8s_sub_to_certificate_identity("system:serviceaccount:namespace")
+        assert result == "system:serviceaccount:namespace"
