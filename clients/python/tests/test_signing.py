@@ -435,12 +435,12 @@ class TestSigningConfig:
 
     def test_loads_environment_variables(self, monkeypatch):
         """Test constructor loads configuration from environment variables."""
-        monkeypatch.setenv("SIGNING_TUF_URL", "https://env-tuf.example.com")
-        monkeypatch.setenv("SIGNING_FULCIO_URL", "https://env-fulcio.example.com")
+        monkeypatch.setenv("SIGSTORE_TUF_URL", "https://env-tuf.example.com")
+        monkeypatch.setenv("SIGSTORE_FULCIO_URL", "https://env-fulcio.example.com")
         expected_path = "/etc/signing/oidc.jwt"
-        monkeypatch.setenv("SIGNING_IDENTITY_TOKEN_PATH", expected_path)
+        monkeypatch.setenv("SIGSTORE_IDENTITY_TOKEN_PATH", expected_path)
 
-        config = SigningConfig.from_env()
+        config = SigningConfig.create()
 
         assert config.tuf_url == "https://env-tuf.example.com"
         assert config.fulcio_url == "https://env-fulcio.example.com"
@@ -493,14 +493,14 @@ class TestSigningConfig:
     def test_empty_string_env_vars_treated_as_none(self, monkeypatch):
         """Test empty string environment variables are treated as None."""
         # Set some env vars to empty strings
-        monkeypatch.setenv("SIGNING_TUF_URL", "")
-        monkeypatch.setenv("SIGNING_FULCIO_URL", "")
-        monkeypatch.setenv("SIGNING_IDENTITY_TOKEN_PATH", "")
-        monkeypatch.setenv("SIGNING_CACHE_DIR", "")
+        monkeypatch.setenv("SIGSTORE_TUF_URL", "")
+        monkeypatch.setenv("SIGSTORE_FULCIO_URL", "")
+        monkeypatch.setenv("SIGSTORE_IDENTITY_TOKEN_PATH", "")
+        monkeypatch.setenv("SIGSTORE_CACHE_DIR", "")
         # Set one to a real value to verify it still works
-        monkeypatch.setenv("SIGNING_REKOR_URL", "https://rekor.example.com")
+        monkeypatch.setenv("SIGSTORE_REKOR_URL", "https://rekor.example.com")
 
-        config = SigningConfig.from_env()
+        config = SigningConfig.create()
 
         # Empty string env vars should be None
         assert config.tuf_url is None
@@ -524,17 +524,17 @@ class TestSigner:
         assert signer.config.tuf_url == "https://tuf.example.com"
         assert signer.config.fulcio_url == "https://fulcio.example.com"
 
-    def test_init_loads_from_env(self, monkeypatch):
+    def test_init_loads_create(self, monkeypatch):
         """Test __init__ loads from environment variables."""
-        monkeypatch.setenv("SIGNING_TUF_URL", "https://env-tuf.example.com")
+        monkeypatch.setenv("SIGSTORE_TUF_URL", "https://env-tuf.example.com")
         signer = Signer()
 
         assert signer.config.tuf_url == "https://env-tuf.example.com"
 
     def test_init_with_overrides(self, monkeypatch):
         """Test __init__ with override arguments over environment."""
-        monkeypatch.setenv("SIGNING_TUF_URL", "https://env-tuf.example.com")
-        monkeypatch.setenv("SIGNING_FULCIO_URL", "https://env-fulcio.example.com")
+        monkeypatch.setenv("SIGSTORE_TUF_URL", "https://env-tuf.example.com")
+        monkeypatch.setenv("SIGSTORE_FULCIO_URL", "https://env-fulcio.example.com")
 
         signer = Signer(
             fulcio_url="https://override-fulcio.example.com",

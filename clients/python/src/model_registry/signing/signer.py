@@ -53,7 +53,7 @@ class Signer:
             signature_filename: Default signature filename (default: model.sig)
             ignore_paths: Default paths to ignore during signing
         """
-        self.config = SigningConfig.from_env(
+        self.config = SigningConfig.create(
             tuf_url=tuf_url,
             root_url=root_url,
             root_checksum=root_checksum,
