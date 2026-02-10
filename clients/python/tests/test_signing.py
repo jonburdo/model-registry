@@ -434,17 +434,18 @@ class TestSigningConfig:
     """Test SigningConfig class."""
 
     def test_loads_environment_variables(self, monkeypatch):
-        """Test constructor loads configuration from environment variables."""
+        """Test constructor loads configuration from environment variables for the 4 service URLs."""
         monkeypatch.setenv("SIGSTORE_TUF_URL", "https://env-tuf.example.com")
         monkeypatch.setenv("SIGSTORE_FULCIO_URL", "https://env-fulcio.example.com")
-        expected_path = "/etc/signing/oidc.jwt"
-        monkeypatch.setenv("SIGSTORE_IDENTITY_TOKEN_PATH", expected_path)
+        monkeypatch.setenv("SIGSTORE_REKOR_URL", "https://env-rekor.example.com")
+        monkeypatch.setenv("SIGSTORE_TSA_URL", "https://env-tsa.example.com")
 
         config = SigningConfig.create()
 
         assert config.tuf_url == "https://env-tuf.example.com"
         assert config.fulcio_url == "https://env-fulcio.example.com"
-        assert config.identity_token_path == Path(expected_path)
+        assert config.rekor_url == "https://env-rekor.example.com"
+        assert config.tsa_url == "https://env-tsa.example.com"
 
     def test_creates_config_from_kwargs(self):
         """Test creating config from keyword arguments."""
@@ -491,12 +492,11 @@ class TestSigningConfig:
         assert result["tuf_url"] == "https://tuf.example.com"
 
     def test_empty_string_env_vars_treated_as_none(self, monkeypatch):
-        """Test empty string environment variables are treated as None."""
-        # Set some env vars to empty strings
+        """Test empty string environment variables are treated as None for the 4 URL env vars."""
+        # Set URL env vars to empty strings (only these 4 use env vars now)
         monkeypatch.setenv("SIGSTORE_TUF_URL", "")
         monkeypatch.setenv("SIGSTORE_FULCIO_URL", "")
-        monkeypatch.setenv("SIGSTORE_IDENTITY_TOKEN_PATH", "")
-        monkeypatch.setenv("SIGSTORE_CACHE_DIR", "")
+        monkeypatch.setenv("SIGSTORE_TSA_URL", "")
         # Set one to a real value to verify it still works
         monkeypatch.setenv("SIGSTORE_REKOR_URL", "https://rekor.example.com")
 
@@ -505,8 +505,7 @@ class TestSigningConfig:
         # Empty string env vars should be None
         assert config.tuf_url is None
         assert config.fulcio_url is None
-        assert config.identity_token_path is None
-        assert config.cache_dir is None
+        assert config.tsa_url is None
         # Non-empty env var should work
         assert config.rekor_url == "https://rekor.example.com"
 
