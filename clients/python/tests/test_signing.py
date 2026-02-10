@@ -727,3 +727,125 @@ class TestImageSignerFromConfig:
 
         # ImageSigner uses 'root' not 'root_url'
         assert signer.root == "https://tuf.example.com/root.json"
+
+    def test_default_root_url_from_tuf_url(self, monkeypatch):
+        """Test root_url defaults to {tuf_url}/root.json."""
+        monkeypatch.setenv("SIGSTORE_TUF_URL", "https://tuf.example.com")
+
+        config = SigningConfig.create()
+
+        assert config.tuf_url == "https://tuf.example.com"
+        assert config.root_url == "https://tuf.example.com/root.json"
+
+    def test_explicit_root_url_overrides_default(self, monkeypatch):
+        """Test explicit root_url overrides the default."""
+        monkeypatch.setenv("SIGSTORE_TUF_URL", "https://tuf.example.com")
+
+        config = SigningConfig.create(root_url="https://custom.example.com/custom-root.json")
+
+        assert config.tuf_url == "https://tuf.example.com"
+        assert config.root_url == "https://custom.example.com/custom-root.json"
+
+    def test_default_k8s_token_path(self, tmp_path, monkeypatch):
+        """Test identity_token_path defaults to k8s service account token if it exists."""
+        # Create a fake k8s token file
+        k8s_token_dir = tmp_path / "var" / "run" / "secrets" / "kubernetes.io" / "serviceaccount"
+        k8s_token_dir.mkdir(parents=True)
+        k8s_token_path = k8s_token_dir / "token"
+        k8s_token_path.write_text("fake-k8s-token")
+
+        # Mock Path to use our temp directory
+        import model_registry.signing.config as config_module
+        original_path = config_module.Path
+
+        class MockPath(type(tmp_path)):
+            def __new__(cls, *args):
+                if args and args[0] == "/var/run/secrets/kubernetes.io/serviceaccount/token":
+                    return original_path(k8s_token_path)
+                return original_path(*args)
+
+        monkeypatch.setattr(config_module, "Path", MockPath)
+
+        config = SigningConfig.create()
+
+        assert config.identity_token_path == k8s_token_path
+
+    def test_extract_values_from_token(self, tmp_path):
+        """Test extracting oidc_issuer, client_id, and certificate_identity from token."""
+        # Create a fake JWT token with the claims we want to extract
+        import base64
+        import json
+
+        header = base64.urlsafe_b64encode(b'{"alg":"RS256"}').decode().rstrip("=")
+        payload_dict = {
+            "iss": "https://issuer.example.com",
+            "aud": ["client-123", "client-456"],
+            "email": "user@example.com",
+            "sub": "user-subject-id",
+        }
+        payload = base64.urlsafe_b64encode(json.dumps(payload_dict).encode()).decode().rstrip("=")
+        signature = base64.urlsafe_b64encode(b"fake-signature").decode().rstrip("=")
+        token = f"{header}.{payload}.{signature}"
+
+        # Write token to a file
+        token_file = tmp_path / "token"
+        token_file.write_text(token)
+
+        config = SigningConfig.create(identity_token_path=token_file)
+
+        assert config.oidc_issuer == "https://issuer.example.com"
+        assert config.client_id == "client-123"  # First element of aud array
+        assert config.certificate_identity == "user@example.com"  # Prefers email over sub
+
+    def test_extract_sub_when_no_email_in_token(self, tmp_path):
+        """Test certificate_identity falls back to sub when email is not present."""
+        import base64
+        import json
+
+        header = base64.urlsafe_b64encode(b'{"alg":"RS256"}').decode().rstrip("=")
+        payload_dict = {
+            "iss": "https://issuer.example.com",
+            "aud": "client-123",
+            "sub": "user-subject-id",
+        }
+        payload = base64.urlsafe_b64encode(json.dumps(payload_dict).encode()).decode().rstrip("=")
+        signature = base64.urlsafe_b64encode(b"fake-signature").decode().rstrip("=")
+        token = f"{header}.{payload}.{signature}"
+
+        token_file = tmp_path / "token"
+        token_file.write_text(token)
+
+        config = SigningConfig.create(identity_token_path=token_file)
+
+        assert config.certificate_identity == "user-subject-id"  # Falls back to sub
+
+    def test_explicit_values_override_token_extraction(self, tmp_path):
+        """Test explicit values override token extraction."""
+        import base64
+        import json
+
+        header = base64.urlsafe_b64encode(b'{"alg":"RS256"}').decode().rstrip("=")
+        payload_dict = {
+            "iss": "https://issuer.example.com",
+            "aud": "client-123",
+            "email": "user@example.com",
+        }
+        payload = base64.urlsafe_b64encode(json.dumps(payload_dict).encode()).decode().rstrip("=")
+        signature = base64.urlsafe_b64encode(b"fake-signature").decode().rstrip("=")
+        token = f"{header}.{payload}.{signature}"
+
+        token_file = tmp_path / "token"
+        token_file.write_text(token)
+
+        config = SigningConfig.create(
+            identity_token_path=token_file,
+            oidc_issuer="https://custom-issuer.example.com",
+            client_id="custom-client",
+            certificate_identity="custom@example.com",
+        )
+
+        # Explicit values should win
+        assert config.oidc_issuer == "https://custom-issuer.example.com"
+        assert config.client_id == "custom-client"
+        assert config.certificate_identity == "custom@example.com"
+
