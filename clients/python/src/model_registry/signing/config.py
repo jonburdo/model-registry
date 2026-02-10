@@ -19,7 +19,7 @@ U = TypeVar("U")
 class SigningConfig(BaseModel):
     """Configuration for model and image signing operations.
 
-    Loads configuration from environment variables with SIGNING_ prefix.
+    Loads configuration from environment variables with SIGSTORE_ prefix.
     All fields are optional to allow flexible configuration.
 
     Example:
@@ -87,18 +87,18 @@ class SigningConfig(BaseModel):
             SigningConfig instance with values from environment variables and overrides
         """
         return cls(
-            tuf_url=resolve(tuf_url, "SIGNING_TUF_URL"),
-            root_url=resolve(root_url, "SIGNING_ROOT_URL"),
-            root_checksum=resolve(root_checksum, "SIGNING_ROOT_CHECKSUM"),
-            identity_token_path=resolve(identity_token_path, "SIGNING_IDENTITY_TOKEN_PATH", Path),
-            fulcio_url=resolve(fulcio_url, "SIGNING_FULCIO_URL"),
-            rekor_url=resolve(rekor_url, "SIGNING_REKOR_URL"),
-            tsa_url=resolve(tsa_url, "SIGNING_TSA_URL"),
-            certificate_identity=resolve(certificate_identity, "SIGNING_CERTIFICATE_IDENTITY"),
-            oidc_issuer=resolve(oidc_issuer, "SIGNING_OIDC_ISSUER"),
-            client_id=resolve(client_id, "SIGNING_CLIENT_ID"),
-            cache_dir=resolve(cache_dir, "SIGNING_CACHE_DIR", Path),
-            cosign_bin_url=resolve(cosign_bin_url, "SIGNING_COSIGN_BIN_URL"),
+            tuf_url=resolve(tuf_url, "SIGSTORE_TUF_URL"),
+            root_url=resolve(root_url, "SIGSTORE_ROOT_URL"),
+            root_checksum=resolve(root_checksum, "SIGSTORE_ROOT_CHECKSUM"),
+            identity_token_path=resolve(identity_token_path, "SIGSTORE_IDENTITY_TOKEN_PATH", Path),
+            fulcio_url=resolve(fulcio_url, "SIGSTORE_FULCIO_URL"),
+            rekor_url=resolve(rekor_url, "SIGSTORE_REKOR_URL"),
+            tsa_url=resolve(tsa_url, "SIGSTORE_TSA_URL"),
+            certificate_identity=resolve(certificate_identity, "SIGSTORE_CERTIFICATE_IDENTITY"),
+            oidc_issuer=resolve(oidc_issuer, "SIGSTORE_OIDC_ISSUER"),
+            client_id=resolve(client_id, "SIGSTORE_CLIENT_ID"),
+            cache_dir=resolve(cache_dir, "SIGSTORE_CACHE_DIR", Path),
+            cosign_bin_url=resolve(cosign_bin_url, "SIGSTORE_COSIGN_BIN_URL"),
             signature_filename=signature_filename,
             ignore_paths=[Path(p) for p in ignore_paths] if ignore_paths else None,
         )
