@@ -74,9 +74,12 @@ class SigningConfig(BaseModel):
         - SIGSTORE_TSA_URL
 
         Other values are calculated or use sensible defaults:
-        - identity_token_path defaults to Kubernetes service account token location
+        - identity_token_path defaults to /var/run/secrets/kubernetes.io/serviceaccount/token
+          (the service account token from the workspace/workbench where code is running)
         - root_url defaults to {tuf_url}/root.json
         - oidc_issuer, client_id, certificate_identity are extracted from identity token if available
+          For Kubernetes service account tokens, certificate_identity uses the 'sub' claim
+          which is already in the correct format: system:serviceaccount:<namespace>:<serviceaccount>
 
         Args:
             tuf_url: TUF server URL (env: SIGSTORE_TUF_URL)
@@ -136,8 +139,13 @@ class SigningConfig(BaseModel):
                     resolved_client_id = extract_client_id(claims)
 
                 if resolved_certificate_identity is None:
-                    # Prefer email, fall back to sub
-                    resolved_certificate_identity = claims.get("email") or claims.get("sub")
+                    # For Kubernetes service account tokens, use sub directly (already in format: system:serviceaccount:namespace:name)
+                    # For other OIDC tokens, prefer email over sub
+                    is_k8s_token = "kubernetes.io/serviceaccount/namespace" in claims
+                    if is_k8s_token:
+                        resolved_certificate_identity = claims.get("sub")
+                    else:
+                        resolved_certificate_identity = claims.get("email") or claims.get("sub")
             except (OSError, ValueError):
                 # If token reading/parsing fails, just use None values
                 pass

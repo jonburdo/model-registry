@@ -849,3 +849,55 @@ class TestImageSignerFromConfig:
         assert config.client_id == "custom-client"
         assert config.certificate_identity == "custom@example.com"
 
+
+    def test_k8s_token_uses_sub_for_certificate_identity(self, tmp_path):
+        """Test Kubernetes service account token uses sub claim directly."""
+        import base64
+        import json
+
+        header = base64.urlsafe_b64encode(b'{"alg":"RS256"}').decode().rstrip("=")
+        payload_dict = {
+            "iss": "https://kubernetes.default.svc.cluster.local",
+            "aud": ["https://kubernetes.default.svc.cluster.local"],
+            "sub": "system:serviceaccount:my-namespace:my-serviceaccount",
+            "kubernetes.io/serviceaccount/namespace": "my-namespace",
+            "kubernetes.io/serviceaccount/service-account.name": "my-serviceaccount",
+        }
+        payload = base64.urlsafe_b64encode(json.dumps(payload_dict).encode()).decode().rstrip("=")
+        signature = base64.urlsafe_b64encode(b"fake-signature").decode().rstrip("=")
+        token = f"{header}.{payload}.{signature}"
+
+        token_file = tmp_path / "token"
+        token_file.write_text(token)
+
+        config = SigningConfig.create(identity_token_path=token_file)
+
+        # For K8s tokens, should use sub directly (already in correct format)
+        assert config.certificate_identity == "system:serviceaccount:my-namespace:my-serviceaccount"
+        assert config.oidc_issuer == "https://kubernetes.default.svc.cluster.local"
+
+    def test_k8s_token_prefers_sub_over_email(self, tmp_path):
+        """Test Kubernetes token prefers sub over email even if email is present."""
+        import base64
+        import json
+
+        header = base64.urlsafe_b64encode(b'{"alg":"RS256"}').decode().rstrip("=")
+        payload_dict = {
+            "iss": "https://kubernetes.default.svc.cluster.local",
+            "aud": "https://kubernetes.default.svc.cluster.local",
+            "sub": "system:serviceaccount:my-namespace:my-serviceaccount",
+            "email": "user@example.com",  # This should be ignored for K8s tokens
+            "kubernetes.io/serviceaccount/namespace": "my-namespace",
+        }
+        payload = base64.urlsafe_b64encode(json.dumps(payload_dict).encode()).decode().rstrip("=")
+        signature = base64.urlsafe_b64encode(b"fake-signature").decode().rstrip("=")
+        token = f"{header}.{payload}.{signature}"
+
+        token_file = tmp_path / "token"
+        token_file.write_text(token)
+
+        config = SigningConfig.create(identity_token_path=token_file)
+
+        # Should use sub, not email, for K8s tokens
+        assert config.certificate_identity == "system:serviceaccount:my-namespace:my-serviceaccount"
+
