@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeAlias
@@ -20,10 +21,26 @@ from .trust_manager import TrustManager
 if TYPE_CHECKING:
     from .config import SigningConfig
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
 PathLike: TypeAlias = str | os.PathLike[str]
+
+
+def configure_logger(logger=None):
+    """Configure logger for model signing."""
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    logger.setLevel(logging.INFO)
+    # don't inherit setting applied globally on `logging`
+    logger.propagate = False
+    logger.handlers.clear()
+    handler = logging.StreamHandler(sys.stdout)
+    log_format = logging.Formatter(fmt="%(asctime)s [%(levelname)s]: %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+    handler.setFormatter(log_format)
+    logger.addHandler(handler)
+    return logger
+
+
+logger = configure_logger()
 
 
 class ModelSigner:
