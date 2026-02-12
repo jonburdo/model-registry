@@ -44,7 +44,7 @@ class CommandRunner:
         # Explicitly pass current environment to ensure DOCKER_CONFIG and other vars are inherited
         result = self._run(cmd, env=os.environ.copy())
         if result.stderr:
-            print(result.stderr, file=sys.stderr)
+            print(result.stderr, file=sys.stdout)
         return result
 
 
