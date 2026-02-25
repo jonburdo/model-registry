@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING, TypeAlias
 from model_signing import signing, verifying
 from typing_extensions import Self
 
-from model_registry.signing import sign_sigstore
+# from model_registry.signing import sign_sigstore
+from model_signing._signing import sign_sigstore
 
 from .exceptions import InitializationError, SigningError, VerificationError
 from .token import decode_jwt_payload, extract_client_id
@@ -374,6 +375,173 @@ class ModelSigner:
                 oidc_issuer=oidc_issuer,
                 trust_config=trust_config_path,
             ).verify(model_path, signature_path)
+
+            logger.info("Successfully verified model signature")
+
+        except FileNotFoundError:
+            raise
+        except ValueError as e:
+            # verifying.Config().verify() raises ValueError on verification failure
+            logger.error(f"Verification failed: {e}")
+            msg = f"Verification failed: {e}"
+            raise VerificationError(msg) from e
+        except VerificationError:
+            raise
+        except Exception as e:
+            msg = f"Verification failed: {e}"
+            raise VerificationError(msg) from e
+
+    def sign_image(  # noqa: C901
+        self,
+        model_path: str,
+        signature_path: PathLike | None = None,
+        identity_token_path: PathLike | None = None,
+        fulcio_url: str | None = None,
+        rekor_url: str | None = None,
+        tsa_url: str | None = None,
+        client_id: str | None = None,
+        ignore_paths: Iterable[PathLike] | None = None,
+    ) -> Path:
+        """Sign a model directory.
+
+        Args:
+            model_path: Path to model directory
+            signature_path: Path where signature file should be written (default: model_path/signature_filename)
+            identity_token_path: Path to identity token file (uses instance default if not provided)
+            fulcio_url: Fulcio URL (uses instance default if not provided)
+            rekor_url: Rekor URL (uses instance default if not provided)
+            tsa_url: TSA URL (uses instance default if not provided)
+            client_id: OIDC client ID (extracted from token if not provided)
+            ignore_paths: Paths to ignore during signing (uses instance default if not provided)
+
+        Returns:
+            Path to the signature file
+
+        Raises:
+            SigningError: If signing fails or required parameters missing
+            FileNotFoundError: If model_path or identity_token_path doesn't exist
+            ValueError: If token format is invalid
+        """
+        # Use method args or fall back to instance defaults
+        if identity_token_path is None:
+            identity_token_path = self.identity_token_path
+        if fulcio_url is None:
+            fulcio_url = self.fulcio_url
+        if rekor_url is None:
+            rekor_url = self.rekor_url
+        if tsa_url is None:
+            tsa_url = self.tsa_url
+        if ignore_paths is None:
+            ignore_paths = self.ignore_paths
+
+        # Validate identity_token_path is provided
+        if identity_token_path is None:
+            msg = "Identity token path is required for signing. Provide via parameter or during instantiation."
+            raise SigningError(msg)
+
+        # Validate identity token file exists
+        token_path = Path(identity_token_path)
+        if not token_path.exists():
+            msg = f"Identity token file not found: {token_path}. Expected JWT token file."
+            raise SigningError(msg)
+
+        try:
+            logger.info(f"Signing model: {model_path}")
+
+            # Ensure trust configuration is initialized
+            self._ensure_trust_initialized()
+
+            # Load trust config path
+            logger.info("Initializing signing context...")
+            trust_config_path = self.get_trust_config_path()
+
+            # Read and parse identity token
+            token_str = token_path.read_text().strip()
+
+            # Extract client_id from token if not provided
+            if client_id is None:
+                claims = decode_jwt_payload(token_str)
+                client_id = extract_client_id(claims)
+
+            # Create signer with trust configuration
+            signer = sign_sigstore.Signer(
+                identity_token=token_str,
+                oidc_issuer=self.oidc_issuer,
+                client_id=client_id,
+                trust_config=trust_config_path,
+            )
+
+            # Sign using model-signing API
+            config = signing.Config()
+
+            if ignore_paths is not None:
+                config._hashing_config._ignored_paths |= {Path(p) for p in ignore_paths}
+            config._signer = signer
+
+            config.sign_image(model_path)
+
+            logger.info("Signed successfully")
+            return signature_path
+
+        except (FileNotFoundError, SigningError, ValueError):
+            raise
+        except Exception as e:
+            msg = f"Signing failed: {e}"
+            raise SigningError(msg) from e
+
+    def verify_image(  # noqa: C901
+        self,
+        model_path: str,
+        certificate_identity: str | None = None,
+        oidc_issuer: str | None = None,
+    ) -> None:
+        """Verify a signed model.
+
+        Verifies the model signature and raises an exception if verification fails.
+
+        Args:
+            model_path: Path to model directory
+            signature_path: Path to signature file (default: model_path/signature_filename)
+            certificate_identity: Expected certificate identity (uses instance default if not provided)
+            oidc_issuer: OIDC issuer (uses instance default if not provided)
+
+        Raises:
+            VerificationError: If verification fails or required parameters missing
+            FileNotFoundError: If model_path or signature doesn't exist
+        """
+        # Use method args or fall back to instance defaults
+        if certificate_identity is None:
+            certificate_identity = self.certificate_identity
+        if oidc_issuer is None:
+            oidc_issuer = self.oidc_issuer
+
+        # Validate required parameters
+        if certificate_identity is None:
+            msg = "certificate_identity is required for verification. Provide via parameter or during instantiation."
+            raise VerificationError(msg)
+
+        if oidc_issuer is None:
+            msg = "oidc_issuer is required for verification. Provide via parameter or during instantiation."
+            raise VerificationError(msg)
+
+        try:
+            logger.info(f"Verifying model: {model_path}")
+
+            # Ensure trust configuration is initialized
+            self._ensure_trust_initialized()
+
+            # Load trust config path
+            trust_config_path = self.get_trust_config_path()
+
+            logger.info(f"Expected identity: {certificate_identity}")
+            logger.info(f"Expected issuer: {oidc_issuer}")
+
+            # Verify using model_signing.verifying API
+            verifying.Config().use_sigstore_verifier(
+                identity=certificate_identity,
+                oidc_issuer=oidc_issuer,
+                trust_config=trust_config_path,
+            ).verify_image(model_path)
 
             logger.info("Successfully verified model signature")
 
