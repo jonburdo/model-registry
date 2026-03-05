@@ -1,7 +1,9 @@
 """Tests for signing utilities."""
 
+import logging
 import subprocess
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -14,6 +16,7 @@ from model_registry.signing import (
     SigningError,
     VerificationError,
 )
+from model_registry.signing._logging import InstanceLevelAdapter
 
 TUF_URL = "https://tuf.example.com"
 ROOT_URL = f"{TUF_URL}/root.json"
@@ -961,3 +964,49 @@ class TestTokenUtils:
         # Missing parts
         result = k8s_sub_to_certificate_identity("system:serviceaccount:namespace")
         assert result == "system:serviceaccount:namespace"
+
+
+class TestLogging:
+    """Test signing logging configuration."""
+
+    def test_adapter_filters_below_instance_level(self):
+        """Adapter suppresses messages below instance_level."""
+        mock_logger = MagicMock()
+        adapter = InstanceLevelAdapter(mock_logger, {
+            "instance_name": "Test",
+            "instance_level": logging.WARNING,
+        })
+
+        adapter.info("should be suppressed")
+        mock_logger.log.assert_not_called()
+
+        adapter.warning("should pass")
+        assert mock_logger.log.called
+
+    def test_signing_logger_does_not_propagate(self):
+        """Signing logger is independent of root logger."""
+        signing_logger = logging.getLogger("model_registry.signing")
+        assert signing_logger.propagate is False
+
+    def test_set_log_level_adjusts_signing_logger(self):
+        """Signer.set_log_level adjusts the shared signing logger."""
+        signing_logger = logging.getLogger("model_registry.signing")
+        original_level = signing_logger.level
+
+        try:
+            Signer.set_log_level(logging.DEBUG)
+            assert signing_logger.level == logging.DEBUG
+        finally:
+            signing_logger.setLevel(original_level)
+
+    def test_signer_accepts_log_level(self):
+        """Signer constructor accepts log_level parameter."""
+        signing_logger = logging.getLogger("model_registry.signing")
+        original_level = signing_logger.level
+
+        try:
+            signer = Signer(log_level=logging.DEBUG)
+            assert signing_logger.level == logging.DEBUG
+            assert signer.logger.extra["instance_level"] == logging.DEBUG
+        finally:
+            signing_logger.setLevel(original_level)

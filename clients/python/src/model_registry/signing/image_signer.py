@@ -2,20 +2,23 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import subprocess
-import sys
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from typing_extensions import Self
 
+from model_registry.signing._logging import InstanceLevelAdapter
 from model_registry.signing.exceptions import InitializationError, SigningError, VerificationError
 
 if TYPE_CHECKING:
     from .config import SigningConfig
+
+logger = logging.getLogger(__name__)
 
 
 class CommandRunner:
@@ -30,7 +33,7 @@ class CommandRunner:
         self._run = partial(subprocess.run, check=True, capture_output=True, text=True, **kwargs)
 
     def run(self, cmd: list[str]) -> subprocess.CompletedProcess:
-        """Run a CLI command and handle output.
+        """Run a CLI command and log output.
 
         Args:
             cmd: Command and arguments as a list
@@ -41,11 +44,20 @@ class CommandRunner:
         Raises:
             subprocess.CalledProcessError: If the command fails
         """
-        # Explicitly pass current environment to ensure DOCKER_CONFIG and other vars are inherited
-        result = self._run(cmd, env=os.environ.copy())
-        if result.stderr:
-            print(result.stderr, file=sys.stderr)
-        return result
+        try:
+            # Explicitly pass current environment to ensure DOCKER_CONFIG and other vars are inherited
+            result = self._run(cmd, env=os.environ.copy())
+            if result.stdout:
+                logger.debug(result.stdout.strip())
+            if result.stderr:
+                logger.debug(result.stderr.strip())
+            return result
+        except subprocess.CalledProcessError as e:
+            if e.stdout:
+                logger.error(e.stdout.strip())
+            if e.stderr:
+                logger.error(e.stderr.strip())
+            raise
 
 
 class ImageSigner:
@@ -62,6 +74,7 @@ class ImageSigner:
         certificate_identity: str | None = None,
         oidc_issuer: str | None = None,
         client_id: str | None = None,
+        log_level: int | None = None,
     ):
         """Initialize ImageSigner tool.
 
@@ -75,10 +88,15 @@ class ImageSigner:
             certificate_identity: Default certificate identity
             oidc_issuer: Default OIDC issuer URL
             client_id: Default OIDC client ID
+            log_level: Log level for this instance (e.g. logging.DEBUG)
 
         Raises:
             FileNotFoundError: If identity_token_path is provided but doesn't exist
         """
+        self.logger = InstanceLevelAdapter(logger, {
+            "instance_name": type(self).__name__,
+            "instance_level": log_level if log_level is not None else logging.INFO,
+        })
         self.runner = CommandRunner()
         self.tuf_url = tuf_url
         self.root = root
@@ -177,7 +195,7 @@ class ImageSigner:
         try:
             self.runner.run(cmd)
         except subprocess.CalledProcessError as e:
-            msg = f"Failed to initialize sigstore: {e}"
+            msg = f"Failed to initialize sigstore (exit code {e.returncode})"
             raise InitializationError(msg) from e
 
     def sign(  # noqa: C901
@@ -240,7 +258,7 @@ class ImageSigner:
         try:
             self.runner.run(cmd)
         except subprocess.CalledProcessError as e:
-            msg = f"Failed to sign image {image}: {e}"
+            msg = f"Failed to sign image {image} (exit code {e.returncode})"
             raise SigningError(msg) from e
 
     def verify(self, image: str, certificate_identity: str | None = None, oidc_issuer: str | None = None):
@@ -272,5 +290,5 @@ class ImageSigner:
         try:
             self.runner.run(cmd)
         except subprocess.CalledProcessError as e:
-            msg = f"Failed to verify image {image}: {e}"
+            msg = f"Failed to verify image {image} (exit code {e.returncode})"
             raise VerificationError(msg) from e

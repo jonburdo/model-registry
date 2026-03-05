@@ -16,7 +16,6 @@ from sigstore._internal.tuf import TrustUpdater
 from .exceptions import InitializationError
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 
 class TrustManager:

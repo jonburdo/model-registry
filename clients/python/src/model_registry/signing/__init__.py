@@ -1,5 +1,21 @@
 """Signing utilities for model registry."""
 
+import logging
+
+# Shared parent logger for all signing components, independent of root logger
+logger = logging.getLogger("model_registry.signing")
+logger.propagate = False
+if not logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(
+        logging.Formatter(
+            fmt="%(asctime)s.%(msecs)03d - %(name)s:%(levelname)s: %(message)s",
+            datefmt="%H:%M:%S",
+        )
+    )
+    logger.addHandler(_handler)
+    logger.setLevel(logging.INFO)
+
 from model_registry.signing.config import SigningConfig
 from model_registry.signing.exceptions import (
     BaseSigningError,
