@@ -12,7 +12,6 @@ from model_signing import signing, verifying
 from typing_extensions import Self
 
 from model_registry.signing import sign_sigstore
-
 from model_registry.signing._logging import InstanceLevelAdapter
 
 from .exceptions import InitializationError, SigningError, VerificationError
@@ -68,10 +67,13 @@ class ModelSigner:
             ignore_paths: Default paths to ignore during signing (optional)
             log_level: Log level for this instance (e.g. logging.DEBUG)
         """
-        self.logger = InstanceLevelAdapter(logger, {
-            "instance_name": type(self).__name__,
-            "instance_level": log_level if log_level is not None else logging.INFO,
-        })
+        self.logger = InstanceLevelAdapter(
+            logger,
+            {
+                "instance_name": type(self).__name__,
+                "instance_level": log_level if log_level is not None else logging.INFO,
+            },
+        )
         self.tuf_url = tuf_url
         self.root_url = root_url
         self.root_checksum = root_checksum

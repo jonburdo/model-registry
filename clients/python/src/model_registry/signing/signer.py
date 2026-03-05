@@ -59,10 +59,13 @@ class Signer:
             ignore_paths: Default paths to ignore during signing
             log_level: Log level for all signing components (e.g. logging.DEBUG)
         """
-        self.logger = InstanceLevelAdapter(logger, {
-            "instance_name": type(self).__name__,
-            "instance_level": log_level if log_level is not None else logging.INFO,
-        })
+        self.logger = InstanceLevelAdapter(
+            logger,
+            {
+                "instance_name": type(self).__name__,
+                "instance_level": log_level if log_level is not None else logging.INFO,
+            },
+        )
 
         if log_level is not None:
             self.set_log_level(log_level)

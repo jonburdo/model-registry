@@ -93,10 +93,13 @@ class ImageSigner:
         Raises:
             FileNotFoundError: If identity_token_path is provided but doesn't exist
         """
-        self.logger = InstanceLevelAdapter(logger, {
-            "instance_name": type(self).__name__,
-            "instance_level": log_level if log_level is not None else logging.INFO,
-        })
+        self.logger = InstanceLevelAdapter(
+            logger,
+            {
+                "instance_name": type(self).__name__,
+                "instance_level": log_level if log_level is not None else logging.INFO,
+            },
+        )
         self.runner = CommandRunner()
         self.tuf_url = tuf_url
         self.root = root
