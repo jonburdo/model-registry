@@ -73,20 +73,30 @@ with tempfile.TemporaryDirectory() as tmpdir:
     manifest = json.loads((pull_dir / "blobs" / algo / digest).read_text())
 
     found_paths = set()
+    layer_num = 0
+    print("\nModel layers:")
     for layer in manifest["layers"]:
         algo, digest = layer["digest"].split(":")
         blob = pull_dir / "blobs" / algo / digest
         try:
             with tarfile.open(blob, "r:*") as tar:
-                for m in tar.getmembers():
-                    # Only look at model layer entries (prefixed with "models/")
-                    if m.name.startswith("models/"):
-                        found_paths.add(m.name.removeprefix("models/"))
+                model_entries = [
+                    m for m in tar.getmembers() if m.name.startswith("models/")
+                ]
+                if not model_entries:
+                    continue
+                print(f"  layer {layer_num} ({digest[:12]})")
+                for m in sorted(model_entries, key=lambda m: m.name):
+                    path = m.name.removeprefix("models/")
+                    kind = "dir" if m.isdir() else "file"
+                    print(f"    {'└── ' if m == model_entries[-1] else '├── '}{path}  ({kind})")
+                    found_paths.add(path)
+                layer_num += 1
         except tarfile.TarError:
             continue
 
     # Report
-    print(f"Expected: {sorted(EXPECTED_PATHS)}")
+    print(f"\nExpected: {sorted(EXPECTED_PATHS)}")
     print(f"Found:    {sorted(found_paths)}")
     missing = EXPECTED_PATHS - found_paths
     if missing:
